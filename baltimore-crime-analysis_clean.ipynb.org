@@ -2,6 +2,22 @@
 #+PROPERTY: header-args:python :session ./.jupyter_confile.json :kernel python3 :results output :noweb yes
 #+PROPERTY: CLEAN-EXPORT-FILENAME ./baltimore-crime-analysis_clean.ipynb.org
 
+* TODO Introduction
+** TODO Description of Project :ignore:
+** TODO Why is this worth looking into?
+*** TODO Look into Baltimore crime statistics
+*** TODO Tie into police officers
+* TODO Data Collection
+** TODO Static Data
+This is data that is stored within the repository and does not get downloaded/computed by the code.
+** TODO Dynamic Data
+This is data that is /not/ stored within the repository and /does/ get downloaded/computed by the code.
+* TODO Data Processing
+This is when we clean and normalize our data, preparing it for interpretation and analysis.
+* TODO Exploratory Analysis & Data Visualization
+This is where we will see what our data is telling us, so that we can make better judgements on what to look at for interpretation.
+* TODO Interpretation/Conclusion
+This is where we will draw conclusions from our data.
 * File Config :noexport:
 This is some Emacs configuration I have autoload when I open my notebook file.
 ~org-babel-clean-autoexport-mode~ is a minor mode in my configuration which
