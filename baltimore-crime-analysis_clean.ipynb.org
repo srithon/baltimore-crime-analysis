@@ -1,12 +1,9 @@
 #+title: Baltimore Crime Analysis
-#+PROPERTY: header-args:python :session ./.jupyter_confile.json :kernel python3 :results output :noweb yes
-#+PROPERTY: CLEAN-EXPORT-FILENAME ./baltimore-crime-analysis_clean.ipynb.org
+#+property: header-args:python :session ./.jupyter_confile.json :kernel python3 :results output :noweb yes
+#+property: CLEAN-EXPORT-FILENAME ./baltimore-crime-analysis_clean.ipynb.org
 
 * TODO Introduction
 ** TODO Description of Project :ignore:
-** TODO Why is this worth looking into?
-*** TODO Look into Baltimore crime statistics
-*** TODO Tie into police officers
 * TODO Data Collection
 ** TODO Static Data
 This is data that is stored within the repository and does not get downloaded/computed by the code.
