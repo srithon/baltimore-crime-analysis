@@ -4,11 +4,124 @@
 
 * TODO Introduction
 ** TODO Description of Project :ignore:
+* General Setup
+Let's import the core libraries that we will be using in our project.
+#+begin_src python
+import requests
+import pandas as pd
+import plotly.express as px
+import geopandas as gpd
+
+from bs4 import BeautifulSoup
+import re
+from time import sleep
+#+end_src
+
 * TODO Data Collection
-** TODO Static Data
-This is data that is stored within the repository and does not get downloaded/computed by the code.
-** TODO Dynamic Data
-This is data that is /not/ stored within the repository and /does/ get downloaded/computed by the code.
+
+** Helper Functions
+
+*** Rate-limiting
+Let's write a higher-order function that, given an Iterable, will return a Generator which will wait a certain amount of time between yielding elements.
+#+begin_src python
+from typing import Iterable, Generator
+
+def delay_iterable(iterable: Iterable, delay_seconds=0.5) -> Generator:
+    is_first_element = True
+    for element in iterable:
+        if not is_first_element:
+            sleep(delay_seconds)
+        else:
+            is_first_element = False
+
+        yield element
+#+end_src
+
+Let's write another function for simply delaying repeated function calls.
+#+begin_src python
+def delay_fn(f, delay_seconds=0.5):
+    is_first_time = True
+
+    def delayed_fn(*args, **kwargs):
+        nonlocal f, is_first_time
+
+        if not is_first_time:
+            sleep(delay_seconds)
+        else:
+            is_first_time = False
+
+        return f(*args, **kwargs)
+
+    return delayed_fn
+#+end_src
+
+** Police Stations
+There are 9 districts in Baltimore, corresponding to the 4 cardinal directions, 4 in-betweens and one central district.
+To get the locations of the police stations in Baltimore, we will webscrape https://www.baltimorepolice.org/find-my-district, get the addresses of each station, and then use ~geopy~ to get the lat/long from each address.
+
+First, let's set a constant for our base URL, and abstract out our directions into lists.
+#+begin_src python
+base_url = 'https://www.baltimorepolice.org/find-my-district'
+
+vertical_directions = ['north', 'south']
+horizontal_directions = ['east', 'west']
+#+end_src
+
+Let's start by setting our central station.
+#+begin_src python
+stations = ['central']
+#+end_src
+
+Now, let's add in each compass direction, appending an "ern" to the end of each one, i.e "east" becomes "eastern".
+#+begin_src python
+for direction in vertical_directions + horizontal_directions:
+    stations.append(f'{direction}ern')
+#+end_src
+
+Next, we'll add the compound directions, which are formed by joining a vertical and horizontal direction, followed by "ern" like before.
+#+begin_src python
+for vertical in vertical_directions:
+    for horizontal in horizontal_directions:
+        stations.append(f'{vertical}{horizontal}ern')
+#+end_src
+
+Now that we have a list of all of our stations, let's make a dictionary mapping each station to its address.
+First, let's write a function that will lookup the address of a single station.
+#+begin_src python
+address_pattern = re.compile(r'Address: (.+)')
+
+def police_lookup_address(station: str) -> str:
+    r = requests.get(f'{base_url}/{station}-district')
+    soup = BeautifulSoup(r.text)
+    combined_text = soup.get_text()
+    search_result = address_pattern.search(combined_text)
+
+    # return the first capture group
+    return search_result.group(1)
+#+end_src
+
+Now, let's make a DataFrame for our stations.
+#+begin_src python
+stations_df = pd.DataFrame.from_dict({'station': stations})
+#+end_src
+
+Let's add a row for the address of each station.
+#+begin_src python
+stations_df['address'] = stations_df.apply(delay_fn(lambda row: police_lookup_address(row.station)), axis=1)
+print(stations_df)
+#+end_src
+
+Next, let's use ~geopandas~ to convert each one of those addresses into a latitude and longitude.
+#+begin_src python
+stations_geocoded = gpd.tools.geocode(stations_df.address)
+print(stations_df)
+#+end_src
+
+We don't need the ~station~ column anymore, and the geocoded ~address~ is superior (more detailed) to the original, so we will replace the initial dataframe with the new one entirely.
+#+begin_src python
+stations_df = stations_geocoded
+#+end_src
+
 * TODO Data Processing
 This is when we clean and normalize our data, preparing it for interpretation and analysis.
 * TODO Exploratory Analysis & Data Visualization
