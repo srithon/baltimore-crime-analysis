@@ -18,6 +18,22 @@ from time import sleep
 #+end_src
 
 * TODO Data Collection
+First, let's make a SPEC matching each dataset to file(s) that they will be saved in.
+#+begin_src python
+dynamic_data_files = {
+    'police-stations': 'police_stations.csv',
+}
+#+end_src
+
+#+begin_src python
+static_data_files = {
+
+}
+#+end_src
+
+#+begin_src python
+data_files = dynamic_data_files | static_data_files
+#+end_src
 
 ** Helper Functions
 
@@ -55,7 +71,9 @@ def delay_fn(f, delay_seconds=0.5):
     return delayed_fn
 #+end_src
 
-** Police Stations
+** One-time Data Collection
+We only want to download the data once, so that future re-runs do not result in downloading it again.
+*** Police Stations
 There are 9 districts in Baltimore, corresponding to the 4 cardinal directions, 4 in-betweens and one central district.
 To get the locations of the police stations in Baltimore, we will webscrape https://www.baltimorepolice.org/find-my-district, get the addresses of each station, and then use ~geopy~ to get the lat/long from each address.
 
@@ -122,6 +140,10 @@ We don't need the ~station~ column anymore, and the geocoded ~address~ is superi
 stations_df = stations_geocoded
 #+end_src
 
+Finally, let's write our data to the file specified in the SPEC.
+#+begin_src python
+stations_df.to_csv(data_files['police-stations'])
+#+end_src
 * TODO Data Processing
 This is when we clean and normalize our data, preparing it for interpretation and analysis.
 * TODO Exploratory Analysis & Data Visualization
