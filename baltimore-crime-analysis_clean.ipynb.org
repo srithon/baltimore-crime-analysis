@@ -20,21 +20,36 @@ from time import sleep
 * TODO Data Collection
 We want all of our data to lie in the ~data/~ subdirectory.
 
-Let's write a helper function for prefixing all of the values in a dictionary by a given string.
+First, let's make a SPEC matching each dataset/topic to file(s) that they will be saved in.
 #+begin_src python
-def prefix_dict_values(prefix: str, dictionary: dict) -> dict:
-    return {key: f'{prefix}{value}' for key, value in dictionary.items()}
+data_files = {
+    'crime-data': 'crime_data.csv',
+    'police-stations': 'police_stations.csv',
+    'population-density': 'total_populations.csv',
+    'median-income': 'median_incomes.geojson',
+}
 #+end_src
 
-First, let's make a SPEC matching each dataset to file(s) that they will be saved in.
+We only want to download the data once, so that future re-runs do not result in downloading it again.
+To accomplish this, we will make a distinction between *static* and *dynamic* data.
+* Static* data is data that we can directly from the internet without modification.
+* Dynamic* data is data that we /compute/ from static data.
+The benefit of this is that when we change our dynamic computation logic, we do not have to redownload our static data.
+
+This function will, given the "tag" of the topic, yield a filepath for the static data.
+For example, ~static_filepath('crime-data')~ would yield ~data/static/crime_data.csv~.
 #+begin_src python
-data_files = prefix_dict_values('data/', {
-    'police-stations': 'dynamic/police_stations.csv',
-    'population-density': 'dynamic/total_populations.csv',
-})
+def static_filepath(tag) -> str:
+    return f'data/static/{data_files[tag]}'
 #+end_src
 
-Let's make our static and dynamic directories incase they don't exist.
+Similarly, ~dynamic_filepath~ will yield the filepath after post-processing.
+#+begin_src python
+def dynamic_filepath(tag) -> str:
+    return f'data/dynamic/{data_files[tag]}'
+#+end_src
+
+Now, let's make our static and dynamic directories incase they don't exist.
 #+begin_src python
 import os
 for d in ['dynamic', 'static']:
@@ -169,10 +184,10 @@ stations_df = stations_geocoded
 #+end_src
 
 Finally, let's write our data to the file specified in the SPEC.
+The data is tightly coupled to our scraping logic, so we write directly to ~dynamic~ rather than ~static~.
 #+begin_src python
-stations_df.to_csv(data_files['police-stations'])
+stations_df.to_csv(dynamic_filepath('police-stations'))
 #+end_src
-
 *** Population Density
 For each district, we will have a coefficient representing population density.
 
@@ -180,7 +195,7 @@ First, let's get the [[https://data.baltimorecity.gov/datasets/bniajfi::total-po
 #+begin_src python
 download_url = r'https://opendata.arcgis.com/api/v3/datasets/56d5b4e5480049e98315c2732aa48437_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
 
-download_filepath = 'data/static/total_populations.geojson'
+download_filepath = static_filepath('population-density')
 download_cached(download_url, download_filepath)
 #+end_src
 
@@ -206,9 +221,12 @@ Let's now drop our unneeded ~tpop~ columns.
 populations_df = populations_df.drop(['tpop10', 'tpop20'], axis=1)
 #+end_src
 
-Finally, let's export our dataframe to a CSV.
+Finally, let's export our dataframe to a CSV, specifying the *dynamic* filepath so that we won't have to redownload our data if we choose to change our data processing logic.
 #+begin_src python
-populations_df.to_csv(data_files['population-density'])
+populations_df.to_csv(dynamic_filepath('population-density'))
+#+end_src
+
+#+begin_src python
 #+end_src
 
 * TODO Data Processing
