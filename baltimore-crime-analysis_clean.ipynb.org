@@ -286,7 +286,36 @@ Finally, let's export our dataframe to a CSV, specifying the *dynamic* filepath 
 populations_df.to_csv(dynamic_filepath('population-density'))
 #+end_src
 
+*** Median Income
+For Median Household Income, we will use the [[https://data.baltimorecity.gov/datasets/bniajfi::median-household-income/explore?layer=0&showTable=true][Median Household Income]] dataset from Open Baltimore.
 #+begin_src python
+download_url = r'https://opendata.arcgis.com/api/v3/datasets/8613366cfbc7447a9efd9123604c65c1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
+
+download_filepath = static_filepath('median-income')
+download_cached(download_url, download_filepath)
+#+end_src
+
+Now, let's read it into a DataFrame.
+#+begin_src python
+median_income_df = gpd.read_file(download_filepath)
+print(median_income_df.head())
+#+end_src
+
+It gives us median household income from 2010 until 2021.
+For consistency, we will choose the middle year: 2016 as our standard.
+#+begin_src python
+median_income_df = median_income_df[['CSA2010', 'mhhi16', 'Shape__Area', 'Shape__Length', 'geometry']].rename(columns={'mhhi16': 'PopulationDensity'})
+#+end_src
+
+Let's now normalize our ~PopulationDensity~ column.
+#+begin_src python
+median_income_df['PopulationDensity'] = normalize_min_max(median_income_df['PopulationDensity'])
+#+end_src
+
+Finally, let's write it to a GeoJSON file.
+#+begin_src python
+median_income_df.to_file(dynamic_filepath('median-income'), driver='GeoJSON')
+#+end_src
 #+end_src
 
 * TODO Data Processing
