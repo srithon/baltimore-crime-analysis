@@ -115,7 +115,6 @@ def normalize_min_max(series: 'Series') -> 'Series':
 #+end_src
 
 ** One-time Data Collection
-We only want to download the data once, so that future re-runs do not result in downloading it again.
 *** Police Stations
 There are 9 districts in Baltimore, corresponding to the 4 cardinal directions, 4 in-betweens and one central district.
 To get the locations of the police stations in Baltimore, we will webscrape https://www.baltimorepolice.org/find-my-district, get the addresses of each station, and then use ~geopy~ to get the lat/long from each address.
