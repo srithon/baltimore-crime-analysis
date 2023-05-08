@@ -160,7 +160,7 @@ print(stations_df)
 Next, let's use ~geopandas~ to convert each one of those addresses into a latitude and longitude.
 #+begin_src python
 stations_geocoded = gpd.tools.geocode(stations_df.address)
-print(stations_df)
+print(stations_geocoded)
 #+end_src
 
 We don't need the ~station~ column anymore, and the geocoded ~address~ is superior (more detailed) to the original, so we will replace the initial dataframe with the new one entirely.
