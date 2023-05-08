@@ -201,6 +201,11 @@ We are using a variant of min-max normalization that puts values between -1 and 
 populations_df['density'] = normalize_min_max(populations_df['density'])
 #+end_src
 
+Let's now drop our unneeded ~tpop~ columns.
+#+begin_src python
+populations_df = populations_df.drop(['tpop10', 'tpop20'], axis=1)
+#+end_src
+
 Finally, let's export our dataframe to a CSV.
 #+begin_src python
 populations_df.to_csv(data_files['population-density'])
