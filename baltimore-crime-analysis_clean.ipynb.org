@@ -97,7 +97,7 @@ def delay_fn(f, delay_seconds=0.5):
     return delayed_fn
 #+end_src
 *** Caching Data
-We don't want to refetch our data every time we run the notebook, so let's write some helper functions that allow us to cache our data after we collect it.
+We don't want to refetch our data every time we run the notebook, so let's write some helper functions that allow us to cache our data after we download it.
 #+begin_src python
 from os import path
 
