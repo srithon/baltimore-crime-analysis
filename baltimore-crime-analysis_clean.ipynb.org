@@ -326,12 +326,6 @@ This is where we will see what our data is telling us, so that we can make bette
 This is where we will draw conclusions from our data.
 * File Config :noexport:
 This is some Emacs configuration I have autoload when I open my notebook file.
-~org-babel-clean-autoexport-mode~ is a minor mode in my configuration which
-automatically saves dirty notebooks to the file specified in
-~CLEAN-EXPORT-FILENAME~, removing any ~:RESULTS:~ in the output.  This has the
-effect of making the document easily version-controllable, since the variable
-outputs of each code block do not mess with the ~diff~.
 
 Local Variables:
-eval: (org-babel-clean-autoexport-mode)
 End:
