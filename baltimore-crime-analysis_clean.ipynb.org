@@ -24,6 +24,8 @@ First, let's make a SPEC matching each dataset/topic to file(s) that they will b
 #+begin_src python
 data_files = {
     'crime-data': 'crime_data.csv',
+    'crime-codes': 'crime_codes.csv',
+
     'police-stations': 'police_stations.csv',
     'population-density': 'total_populations.csv',
     'median-income': 'median_incomes.geojson',
@@ -115,6 +117,65 @@ def normalize_min_max(series: 'Series') -> 'Series':
 #+end_src
 
 ** One-time Data Collection
+*** Crime Data
+In this section, we are going to use the [[https://data.world/baltimore/baltimore-crime-data][Baltimore Crime Data]] dataset, published by the city of Baltimore itself.
+Let's start off by downloading the data.
+#+begin_src python
+download_url = r'https://download.data.world/file_download/baltimore/baltimore-crime-data/BPD_Part_1_Victim_Based_Crime_Data.csv'
+
+download_filepath = static_filepath('crime-data')
+download_cached(download_url, download_filepath)
+#+end_src
+
+By using ~download_cached~, we will only download the file if it does not already exist.
+Now, let's look at the data and see how we can clean it up.
+#+begin_src python
+crime_df = pd.read_csv(download_filepath)
+print(crime_df.head())
+#+end_src
+
+First, let's convert ~CrimeDate~ and ~CrimeTime~, both currently strings, into a single ~CrimeDateTime~ column.
+Looking at the data, we have certain ~CrimeTime~ entries which seem to have the format ~<hour><minute>~ instead of the regular ~<hour>:<minute>:<seconds>~ format.
+Before we convert, we have to first normalize the outliers.
+#+begin_src python
+bad_time_format = re.compile('^(\d{2})(\d{2})$')
+crime_df['CrimeTime'] = crime_df['CrimeTime'].str.replace(bad_time_format, r'\1:\2:00')
+#+end_src
+
+Let's make sure that all of the rows match our expected regex by printing out all of the times that don't match what we're expecting.
+#+begin_src python
+expected_time_format = re.compile('^\d{2}:\d{2}:\d{2}$')
+print(crime_df[~crime_df['CrimeTime'].str.fullmatch(expected_time_format)]['CrimeTime'])
+#+end_src
+
+The list is empty, so we're good.
+Now, let's do the ~DateTime~ conversion.
+#+begin_src python
+crime_time = pd.to_timedelta(crime_df['CrimeTime'])
+crime_df['CrimeDateTime'] = pd.to_datetime(crime_df['CrimeDate'], format='%m/%d/%Y') + crime_time
+print(crime_df.head())
+#+end_src
+
+Now, let's drop the initial Date and Time columns.
+#+begin_src python
+crime_df = crime_df.drop(['CrimeDate', 'CrimeTime'], axis=1)
+#+end_src
+
+~CrimeCode~ seems important, but in its current form it's not very useful.
+To know what each crime code means, let's download the companion [[https://data.baltimorecity.gov/documents/e6ca4eadecdc475a961f68bc314e2a86/about][CRIME CODES]] dataset.
+#+begin_src python
+download_url = r'https://www.arcgis.com/sharing/rest/content/items/e6ca4eadecdc475a961f68bc314e2a86/data'
+download_filepath = static_filepath('crime-codes')
+
+download_cached(download_url, download_filepath)
+#+end_src
+
+Let's see what the data looks like before moving on.
+#+begin_src python
+crime_codes_df = pd.read_csv(download_filepath)
+print(crime_codes_df.head())
+#+end_src
+
 *** Police Stations
 There are 9 districts in Baltimore, corresponding to the 4 cardinal directions, 4 in-betweens and one central district.
 To get the locations of the police stations in Baltimore, we will webscrape https://www.baltimorepolice.org/find-my-district, get the addresses of each station, and then use ~geopy~ to get the lat/long from each address.
