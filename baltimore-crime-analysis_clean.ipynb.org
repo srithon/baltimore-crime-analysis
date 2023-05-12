@@ -2,66 +2,132 @@
 #+property: header-args:python :session ./.jupyter_confile.json :kernel python3 :results output :noweb yes
 #+property: CLEAN-EXPORT-FILENAME ./baltimore-crime-analysis_clean.ipynb.org
 
-* TODO Introduction
-** TODO Description of Project :ignore:
+* Introduction
+** Description of Project :ignore:
+*** Response :ignore:
+In this project, I am going to be analyzing Baltimore Crime data, attempting to infer major factors for crime, including where they tend to occur with respect to geographic features.
+
+**** Why is this worth looking into?
+According to [[https://www.neighborhoodscout.com/md/baltimore/crime][neighborhoodscout.com]], Baltimore has a "Total Crime Index" of 3, meaning that is only safer than roughly 3% of neighborhoods across the United States.
+This is an /absurd/ statistic; why is the [[https://worldpopulationreview.com/states/cities/maryland][most populous city in Maryland]] (and by a /long shot/ too) such a dangerous place to live?
+In order to cut down on crime, we must first understand /why/ it is occurring so that we might address the underlying issues at their source.
+Obviously, "why does crime occur" is an immensely complex question which would require millions of dollars of research in order to answer concretely.
+However, what we /can/ do is draw correlations between crime and different suggesting factors, breaking down the overall problem into pieces that are more directly addressable.
+**** Tie into police officers :ignore:
+Armed with this knowledge, the police can more intelligently allocate their resources to areas with higher crime rates, and may be able to /predict/ how city-level changes will affect crime in the future.
+For example, if we found that proximity to car dealerships had a significant effect on crime rates in the surrounding area, we could pre-emptively increase police presence in an area with an upcoming dealership to deter crime /before/ it occurs.
+**** Overall Picture :ignore:
+Overall, by analyzing existing crime data, we may be able to draw conclusions that will reduce crime in the future.
+**** Explored Factors
+Before we get into our code, we will determine a list of factors to look into
+The source I pulled the factors from will be linked above each set of factors.
+
+- [[https://ncsbi.gov/Services/Crime-Statistics/Crime-Factors][NCSBI - Crime Factors]]
+  1. population density
+  2. median income
+  3. unemployment
+
+- [[https://www.sciencedirect.com/science/article/pii/S014362282100134X][Crime deterrent effect of police stations]] by Fondevila et al.
+  4. [@4] proximity to police stations
+
+- [[https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3412911/][The Association between Density of Alcohol Establishments and Violent Crime within Urban Neighborhoods]] by Toomey et al.
+  5. [@5] proximity to bars
+
+- [[https://publichealth.jhu.edu/2018/baltimore-liquor-stores-linked-more-to-violent-crime-than-bars-and-restaurants][Baltimore Liquor Stores Linked More to Violent Crime Than Bars and Restaurants]], published by the John Hopkins Bloomberg School of Public Health
+  6. [@6] proximity to liquor stores
+
+- [[https://docs.iza.org/dp5000.pdf][The Crime Reducing Effect of Education]] by Machin et al.
+  7. [@7] education level, or proximity to schools
+
+  8. high school completion rate per community statistical area
+
+- [[https://ccjs.umd.edu/sites/ccjs.umd.edu/files/pubs/0022427818807965.pdf][Understanding the Criminogenic Properties of Vacant Housing: A Mixed Methods Approach]] by Porter et al. (this is a UMD paper!)
+  8. [@8] proximity to vacant buildings
+
+- https://osf.io/preprints/socarxiv/swfpn/download
+  9. [@9] proximity to homeless shelters
+
+- [[https://www.researchgate.net/publication/345352947_Exploring_the_relationship_between_strip_clubs_and_rates_of_sexual_violence_and_violent_crime][Exploring the relationship between strip clubs and rates of sexual violence and violent crime | Request PDF]]
+  10. [@10] proximity to strip clubs
+
+***** Rejected Factors
+1. proximity to parks
+   - according to the authors of [[https://theconversation.com/can-parks-help-cities-fight-crime-118322][Can parks help cities fight crime?]], certain parks increase crime severely, and certain crimes decrease it just as much
+   - therefore, this would not be a good factor to analyze
+2. presence of gangs
 * General Setup
 Let's import the core libraries that we will be using in our project.
 #+begin_src python
 import requests
+
 import pandas as pd
 import plotly.express as px
 import geopandas as gpd
+from shapely.geometry import Point
 
 from bs4 import BeautifulSoup
 import re
 from time import sleep
 #+end_src
 
-* TODO Data Collection
+* Data Collection
+** Setup
 We want all of our data to lie in the ~data/~ subdirectory.
 
 First, let's make a SPEC matching each dataset/topic to file(s) that they will be saved in.
 #+begin_src python
-data_files = {
-    'crime-data': 'crime_data.csv',
-    'crime-codes': 'crime_codes.csv',
+data_files = [
+    'crime-data',
+    'crime-codes',
 
-    'police-stations': 'police_stations.csv',
-    'population-density': 'total_populations.csv',
-    'median-income': 'median_incomes.geojson',
-}
+    'police-stations',
+    'population-density',
+    'median-income',
+    'liquor-licenses',
+
+    'vacant-buildings',
+    'baltimore-csa'
+]
 #+end_src
 
 We only want to download the data once, so that future re-runs do not result in downloading it again.
-To accomplish this, we will make a distinction between *static* and *dynamic* data.
-* Static* data is data that we can directly from the internet without modification.
-* Dynamic* data is data that we /compute/ from static data.
-The benefit of this is that when we change our dynamic computation logic, we do not have to redownload our static data.
-
-This function will, given the "tag" of the topic, yield a filepath for the static data.
-For example, ~static_filepath('crime-data')~ would yield ~data/static/crime_data.csv~.
+To accomplish this, we will create a version control system for our data.
+The benefit of this is that when we change our computation logic, we will not have to redownload any data.
+First, let's put data corresponding to each tag in its own subdirectory.
 #+begin_src python
-def static_filepath(tag) -> str:
-    return f'data/static/{data_files[tag]}'
-#+end_src
+def data_directory(tag) -> str:
+    directory = f'data/{tag}'
 
-Similarly, ~dynamic_filepath~ will yield the filepath after post-processing.
-#+begin_src python
-def dynamic_filepath(tag) -> str:
-    return f'data/dynamic/{data_files[tag]}'
-#+end_src
-
-Now, let's make our static and dynamic directories incase they don't exist.
-#+begin_src python
-import os
-for d in ['dynamic', 'static']:
     try:
-        os.mkdir(f'data/{d}')
-    except FileExistsError:
+        os.mkdir(directory)
+    except:
         pass
+
+    return directory
+#+end_src
+
+Next, this function will, given the "tag" of the topic and a version, yield a filepath for the data.
+For example, ~data_filepath('crime-data', 0)~ would yield ~data/crime-data/v0.csv~.
+#+begin_src python
+def data_filepath(tag, version=0, extension=None) -> str:
+    if tag not in data_files:
+        raise Exception(f'Invalid tag: {tag}')
+
+    directory = data_directory(tag)
+
+    if extension is None:
+        # then, autodetect extension
+        available_files = os.listdir(directory)
+        found_file = next((filename for filename in available_files if filename.startswith(f'v{version}')))
+        _, extension = path.splitext(found_file)
+    else:
+        extension = f'.{extension}'
+
+    return f'{directory}/v{version}{extension}'
 #+end_src
 
 ** Helper Functions
+First, let's write some functions that we'll be reusing throughout our project.
 
 *** Rate-limiting
 Let's write a higher-order function that, given an Iterable, will return a Generator which will wait a certain amount of time between yielding elements.
@@ -109,25 +175,151 @@ def download_cached(url: str, filepath: str):
             f.write(requests.get(url).text)
 #+end_src
 *** Normalizing Data
-This function will normalize a Series between -1 and 1.
-This makes things easier for our machine learning model.
+This function will normalize a Series between 0 and 1.
 #+begin_src python
 def normalize_min_max(series: 'Series') -> 'Series':
-    return 2 * (series - series.min()) / (series.max() - series.min()) - 1
+    return (series - series.min()) / (series.max() - series.min())
+#+end_src
+
+*** Loading and Exporting Data
+Let's write a generalized loading function which will determine how to read a file based on the extension.
+By default, it will get the freshest version of the data by finding the highest version of the data in its data directory.
+This will allow us to forget the details of /how/ we collected the data and instead focus on the data itself.
+#+begin_src python
+import os
+from os import path
+
+def latest_data_filepath(key) -> str:
+    data_dir = data_directory(key)
+    versions = os.listdir(data_dir)
+
+    # return the lexicographically highest one
+    return f'{data_dir}/{max(versions)}'
+
+def generic_load(key, version=None) -> object:
+    """
+    If `version` is specified, gets that specific version of the data.
+    """
+    file_path = data_filepath(key, version) if version is not None else latest_data_filepath(key)
+
+    # then, fallback to static data
+    _, extension = path.splitext(file_path)
+    if extension == '.csv':
+        return pd.read_csv(file_path)
+    elif extension == '.json':
+        return pd.read_json(file_path)
+    elif extension == '.geoparquet':
+        return gpd.read_parquet(file_path)
+    elif extension == '.geojson':
+        return gpd.read_file(file_path)
+    elif extension == '.parquet':
+        return pd.read_parquet(file_path)
+    else:
+        raise Exception(f'Invalid format: {extension}')
+#+end_src
+
+Next, let's write a generalized exporting function which will allow us to export our dataframes to the filesystem.
+For ~GeoDataFrame~ types, we specifically use the ~parquet~ data format since it is significantly more space-efficient than ~geojson~.
+The reason we use ~parquet~ over ~csv~ for regular DataFrames is because when reading from ~csv~, some "special" fields like ~DateTime~'s are not read into the proper types.
+#+begin_src python
+def generic_export(key, data: 'DataFrame', version):
+    extension = 'geoparquet' if isinstance(data, gpd.GeoDataFrame) else 'parquet'
+    path = data_filepath(key, version=version, extension=extension)
+    data.to_parquet(path)
+#+end_src
+*** Google Places API
+We will need to use the Google Maps [[https://developers.google.com/maps/documentation/places/web-service/search][Place Search API]] at several points in our Data Collection for geocoding and categorizing addresses.
+Let's write a function which will yield the URL and get parameters to make a request to the Places API, given a search query.
+#+begin_src python
+# unlike requests, this package allows us to do requests in parallel
+find_place_from_text_endpoint = r'https://maps.googleapis.com/maps/api/place/findplacefromtext/json'
+
+def google_find_place_from_text_params(search_query):
+    get_params = {
+        'input': search_query,
+        'inputtype': 'textquery',
+        'fields': 'type,geometry,name,place_id',
+        'key': os.environ['GOOGLE_API_KEY']
+    }
+
+    # url, kwargs
+    return (find_place_from_text_endpoint, get_params)
+#+end_src
+
+This is a function which will extract a ~geometry~ component out of the response to a ~find place from text~ request.
+#+begin_src python
+from shapely.geometry import Point
+
+def extract_geometry_from_places_request(response):
+    try:
+        location = response['candidates'][0]['geometry']['location']
+        return Point(location['lng'], location['lat'])
+    except:
+        return None
+#+end_src
+
+Now, let's write a function which will run a list of requests in parallel.
+#+begin_src python
+from requests_futures.sessions import FuturesSession
+from concurrent.futures import as_completed
+
+def run_requests(request_param_list: 'List[Tuple[str, dict]]'):
+    session = FuturesSession(max_workers=4)
+
+    futures = []
+    for (index, (url, get_params)) in enumerate(request_param_list):
+        future = session.get(url, params=get_params)
+        future.index = index
+        futures.append(future)
+
+    resolved_futures = list(as_completed(futures))
+
+    # sort by index
+    resolved_futures.sort(key=lambda f: f.index)
+
+    # return the results
+    return list(map(lambda f: f.result().json(), resolved_futures))
+#+end_src
+
+Let's also define a helper for mapping a function over the rows of a DataFrame.
+#+begin_src python
+def map_df(function, df):
+    return (function(row) for row in df.to_dict(orient='records'))
 #+end_src
 
 ** One-time Data Collection
+*** Baltimore Community Statistical Areas
+Let's get the bounding boxes of Baltimore's "Community Statistical Areas", which are "clusters of neighborhoods developed by the City's Planning Department based on recognizable city neighborhoods"  ([[https://health.baltimorecity.gov/node/231][Source]]).
+
+By using ~download_cached~, we will only download the file if it does not already exist.
+#+begin_src python
+download_url = r'https://opendata.arcgis.com/api/v3/datasets/9c96ae20e6cc41258015c2fd288716c4_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
+download_filepath = data_filepath('baltimore-csa', version=0, extension='geojson')
+
+download_cached(download_url, download_filepath)
+#+end_src
+
+Let's load the data and see what columns we have to work with.
+#+begin_src python
+baltimore_csa_df = generic_load('baltimore-csa')
+print(baltimore_csa_df.columns)
+#+end_src
+
+Now, let's plot our data, highlighting the different communities.
+#+begin_src python
+baltimore_csa_df.plot(column='Community')
+#+end_src
+
 *** Crime Data
 In this section, we are going to use the [[https://data.world/baltimore/baltimore-crime-data][Baltimore Crime Data]] dataset, published by the city of Baltimore itself.
 Let's start off by downloading the data.
 #+begin_src python
 download_url = r'https://download.data.world/file_download/baltimore/baltimore-crime-data/BPD_Part_1_Victim_Based_Crime_Data.csv'
 
-download_filepath = static_filepath('crime-data')
+download_filepath = data_filepath('crime-data', 0)
 download_cached(download_url, download_filepath)
 #+end_src
 
-By using ~download_cached~, we will only download the file if it does not already exist.
 Now, let's look at the data and see how we can clean it up.
 #+begin_src python
 crime_df = pd.read_csv(download_filepath)
@@ -139,7 +331,7 @@ Looking at the data, we have certain ~CrimeTime~ entries which seem to have the 
 Before we convert, we have to first normalize the outliers.
 #+begin_src python
 bad_time_format = re.compile('^(\d{2})(\d{2})$')
-crime_df['CrimeTime'] = crime_df['CrimeTime'].str.replace(bad_time_format, r'\1:\2:00')
+crime_df['CrimeTime'] = crime_df['CrimeTime'].str.replace(bad_time_format, r'\1:\2:00', regex=True)
 #+end_src
 
 Let's make sure that all of the rows match our expected regex by printing out all of the times that don't match what we're expecting.
@@ -156,16 +348,77 @@ crime_df['CrimeDateTime'] = pd.to_datetime(crime_df['CrimeDate'], format='%m/%d/
 print(crime_df.head())
 #+end_src
 
-Now, let's drop the initial Date and Time columns.
+Let's drop any rows which do not contain ~Location~'s, since this is our most important feature.
 #+begin_src python
-crime_df = crime_df.drop(['CrimeDate', 'CrimeTime'], axis=1)
+crime_df = crime_df.drop(crime_df[crime_df['Location 1'].isnull()].index)
 #+end_src
 
+Let's also convert our ~Location~ column into ~shapely~ ~Point~ objects.
+Note that because ~geopandas~ expectes ~x~ to correspond to longitude and ~y~ to latitude, we have to reverse the initial order.
+#+begin_src python
+geometry = crime_df['Location 1'].str.extract('\((-?\d+\.\d+), (-?\d+\.\d+)\)', expand=True)
+crime_df['geometry'] = gpd.points_from_xy(geometry[1].astype('float64'), geometry[0].astype('float64'))
+crime_df = gpd.GeoDataFrame(crime_df)
+#+end_src
+
+Now, let's look at a Scatterplot of our data.
+#+begin_src python
+crime_df.plot()
+#+end_src
+
+It seems that there is a cluster of points which lie far away from the rest of the points.
+Let's see what's going on with them.
+#+begin_src python
+outliers = crime_df[crime_df['geometry'].y > 41]
+print(outliers)
+#+end_src
+
+After observing a couple of the addresses, it seems that the ~geometry~ field was input incorrectly, but the addresses are regular.
+To fix the ~geometry~, we'll use the Google Places API for geocoding.
+#+begin_src python
+def find_place_with_address(row):
+    return google_find_place_from_text_params(f"{row['Location']}, Baltimore")
+
+geocoded_results = run_requests(map_df(find_place_with_address, outliers))
+print(geocoded_results[0])
+#+end_src
+
+Now, let's merge our results back into the parent DataFrame.
+#+begin_src python
+crime_df.loc[outliers.index, 'geometry'] = list(map(extract_geometry_from_places_request, geocoded_results))
+#+end_src
+
+Let's see if any of the geolocations failed.
+#+begin_src python
+failed_geolocations = crime_df[crime_df['geometry'].isnull()]
+print(len(failed_geolocations))
+#+end_src
+
+We will drop these rows, since they likely correspond to misinputs.
+#+begin_src python
+crime_df = crime_df.drop(failed_geolocations.index)
+#+end_src
+
+Now, let's plot our data again and make sure it looks correct.
+#+begin_src python
+crime_df.plot()
+#+end_src
+
+This looks a lot more like Baltimore!
+
+Finally, let's drop the initial Date and Time columns as well as the Location column, and write to our dynamic data file.
+As a short aside, this dataset takes almost 100M as a ~geojson~ file, while only taking 7M using the ~parquet~ format.
+#+begin_src python
+crime_df = crime_df.drop(['CrimeDate', 'CrimeTime', 'Location 1'], axis=1)
+generic_export('crime-data', crime_df, version=1)
+#+end_src
+
+**** Crime Codes
 ~CrimeCode~ seems important, but in its current form it's not very useful.
 To know what each crime code means, let's download the companion [[https://data.baltimorecity.gov/documents/e6ca4eadecdc475a961f68bc314e2a86/about][CRIME CODES]] dataset.
 #+begin_src python
 download_url = r'https://www.arcgis.com/sharing/rest/content/items/e6ca4eadecdc475a961f68bc314e2a86/data'
-download_filepath = static_filepath('crime-codes')
+download_filepath = data_filepath('crime-codes', version=0)
 
 download_cached(download_url, download_filepath)
 #+end_src
@@ -177,6 +430,9 @@ print(crime_codes_df.head())
 #+end_src
 
 *** Police Stations
+:PROPERTIES:
+:ID:       3a21afa2-2f0d-42f6-b6a9-b369dd71c467
+:END:
 There are 9 districts in Baltimore, corresponding to the 4 cardinal directions, 4 in-betweens and one central district.
 To get the locations of the police stations in Baltimore, we will webscrape https://www.baltimorepolice.org/find-my-district, get the addresses of each station, and then use ~geopy~ to get the lat/long from each address.
 
@@ -244,10 +500,10 @@ stations_df = stations_geocoded
 #+end_src
 
 Finally, let's write our data to the file specified in the SPEC.
-The data is tightly coupled to our scraping logic, so we write directly to ~dynamic~ rather than ~static~.
 #+begin_src python
-stations_df.to_csv(dynamic_filepath('police-stations'))
+generic_export('police-stations', stations_df, 1)
 #+end_src
+
 *** Population Density
 For each district, we will have a coefficient representing population density.
 
@@ -255,13 +511,13 @@ First, let's get the [[https://data.baltimorecity.gov/datasets/bniajfi::total-po
 #+begin_src python
 download_url = r'https://opendata.arcgis.com/api/v3/datasets/56d5b4e5480049e98315c2732aa48437_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
 
-download_filepath = static_filepath('population-density')
+download_filepath = data_filepath('population-density', version=0)
 download_cached(download_url, download_filepath)
 #+end_src
 
 Now, let's read it into a DataFrame.
 #+begin_src python
-populations_df = gpd.read_file(download_filepath)
+populations_df = generic_load('population-density', version=0)
 print(populations_df.head())
 #+end_src
 
@@ -281,9 +537,9 @@ Let's now drop our unneeded ~tpop~ columns.
 populations_df = populations_df.drop(['tpop10', 'tpop20'], axis=1)
 #+end_src
 
-Finally, let's export our dataframe to a CSV, specifying the *dynamic* filepath so that we won't have to redownload our data if we choose to change our data processing logic.
+Finally, let's export our dataframe.
 #+begin_src python
-populations_df.to_csv(dynamic_filepath('population-density'))
+generic_export('population-density', populations_df, version=1)
 #+end_src
 
 *** Median Income
@@ -291,39 +547,809 @@ For Median Household Income, we will use the [[https://data.baltimorecity.gov/da
 #+begin_src python
 download_url = r'https://opendata.arcgis.com/api/v3/datasets/8613366cfbc7447a9efd9123604c65c1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
 
-download_filepath = static_filepath('median-income')
+download_filepath = data_filepath('median-income', version=0)
 download_cached(download_url, download_filepath)
 #+end_src
 
 Now, let's read it into a DataFrame.
 #+begin_src python
-median_income_df = gpd.read_file(download_filepath)
+median_income_df = generic_load('median-income', version=0)
 print(median_income_df.head())
 #+end_src
 
 It gives us median household income from 2010 until 2021.
 For consistency, we will choose the middle year: 2016 as our standard.
 #+begin_src python
-median_income_df = median_income_df[['CSA2010', 'mhhi16', 'Shape__Area', 'Shape__Length', 'geometry']].rename(columns={'mhhi16': 'PopulationDensity'})
+median_income_df = median_income_df[['CSA2010', 'mhhi16', 'Shape__Area', 'Shape__Length', 'geometry']].rename(columns={'mhhi16': 'MedianIncome'})
 #+end_src
 
-Let's now normalize our ~PopulationDensity~ column.
+Let's now normalize our ~MedianIncome~ column.
 #+begin_src python
-median_income_df['PopulationDensity'] = normalize_min_max(median_income_df['PopulationDensity'])
+median_income_df['MedianIncome'] = normalize_min_max(median_income_df['MedianIncome'])
 #+end_src
 
-Finally, let's write it to a GeoJSON file.
+Finally, let's export the result.
 #+begin_src python
-median_income_df.to_file(dynamic_filepath('median-income'), driver='GeoJSON')
+generic_export('median-income', median_income_df, version=1)
 #+end_src
+*** Finding Liquor Stores, Bars and Strip Clubs
+To get the list of liquor stores, bars and strip clubs, we will use the [[https://data.baltimorecity.gov/datasets/ae5ed61365e74579aea25656ac9ce45e_0/about][Liquor Licenses | Open Baltimore]] dataset.
+Note that we are operating on the assumption that all strip clubs have liquor licenses, but logically this seems like a fair assumption.
+Unfortunately, there is something wrong with the data export on the server side, so rather than simply downloading the data and filtering it locally, we need to use the SQL query interface to get the data.
+#+begin_src python
+query_endpoint = r'https://opendata.baltimorecity.gov/egis/rest/services/NonSpatialTables/Licenses/FeatureServer/0/query'
 #+end_src
 
-* TODO Data Processing
-This is when we clean and normalize our data, preparing it for interpretation and analysis.
-* TODO Exploratory Analysis & Data Visualization
+There are a couple things that will go into our query.
+1. We want to see establishments that are *currently open* over the course of our crime data.
+   Let's find the latest date for our crime data.
+   #+begin_src python
+   # reload the data from the filesystem in case we haven't run the previous cells
+   crime_df = generic_load('crime-data')
+   print(crime_df.CrimeDateTime.max())
+   #+end_src
+
+   Thus, we will filter for license end dates only after ~06/18/2016~, since this is when our data ends.
+
+2. We only want places that are liquor stores, bars or strip clubs; not restaurants or anything else.
+   After querying the endpoint, I found that the following are the list of ~EstablishmentDesc~ categories, labelling what kind of place the license is for.
+   1. Non-Profits only
+   2. Restaurant License
+   3. Municipal Golf Course
+   4. Adult
+   5. Distillery
+   6. Tavern License
+   7. Brewery
+   8. Hotel/Motel
+   9. Racetrack
+   10. Package Goods Only
+   11. Tavern
+   12. Arena
+   13. Restaurant
+   14. Zoo License
+
+   Of these options, we are interested in ~Tavern~, which represent bars, ~Package goods only~ which represents liquor stores, and ~Adult~, which is code for strip clubs.
+   Surprisingly, ~Tavern License~ primarily belongs to restaurants, so we do not group it in with ~Tavern~.
+
+As described in the documentation, there is a limit on how many data entries we can return at once.
+However, if we enable the ~returnIdsOnly~ parameter, this limit does not apply, and we can get all of the ids at once.
+#+begin_src python
+query_params = {
+    'where': f"LicenseEndDate > DATE '{crime_df.CrimeDateTime.max()}' AND EstablishmentDesc IN ('Tavern', 'Adult', 'Package goods only')",
+    'returnIdsOnly': 'true',
+    'f': 'geojson'
+}
+#+end_src
+
+**** Getting the Relevant IDs
+Unfortunately, making the request yields the error specified here: [[https://stackoverflow.com/questions/71603314/ssl-error-unsafe-legacy-renegotiation-disabled][python - SSL error unsafe legacy renegotiation disabled - Stack Overflow]], caused by a bad SSL setup on the server side.
+This is out of our control, and also out of the scope of this project, so I'm copy-pasting [[https://stackoverflow.com/a/73519818][one of the answers]] from the post in order to make the request.
+Please pretend this code doesn't exist.
+#+begin_src python
+import urllib3
+import ssl
+
+
+class CustomHttpAdapter (requests.adapters.HTTPAdapter):
+    # "Transport adapter" that allows us to use custom ssl_context.
+
+    def __init__(self, ssl_context=None, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(**kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False):
+        self.poolmanager = urllib3.poolmanager.PoolManager(
+            num_pools=connections, maxsize=maxsize,
+            block=block, ssl_context=self.ssl_context)
+
+
+def get_legacy_session():
+    ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+    ctx.options |= 0x4  # OP_LEGACY_SERVER_CONNECT
+    session = requests.session()
+    session.mount('https://', CustomHttpAdapter(ctx))
+    return session
+
+def legacy_request_get(*args, **kwargs):
+    return get_legacy_session().get(*args, **kwargs)
+#+end_src
+
+Now that that's out of the way, let's make our request to get the list of IDs.
+#+begin_src python
+ids = legacy_request_get(query_endpoint, params=query_params).json()['properties']['objectIds']
+print(ids[:5])
+#+end_src
+
+**** Paginating the IDs
+Because there's a limit on getting the data (apart from the IDs), we need to paginate our requests so that we get a certain amount at a time.
+From my testing, it appears that the number of entries you can get at once is ~50~, so we will use that number going forward.
+
+Let's disable ~where~ and ~returnIdsOnly~ since we now want the records from the IDs.
+#+begin_src python
+entries_query_params = query_params.copy()
+entries_query_params['where'] = None
+entries_query_params['returnIdsOnly'] = 'false'
+entries_query_params['outFields'] = ','.join(['TradeName', 'EstablishmentDesc', 'AddrStreet', 'AddrZip'])
+#+end_src
+
+Let's run our scraping code.
+#+begin_src python
+liquor_df = None
+
+entries_per_request = 250
+for start_index in range(0, len(ids), entries_per_request):
+    end_index = min(start_index + entries_per_request, len(ids))
+    id_chunk = ids[start_index:end_index]
+    entries_query_params['objectIds'] = ','.join(map(str, id_chunk))
+
+    request_res = legacy_request_get(query_endpoint, params=entries_query_params).json()
+    chunk_df = gpd.GeoDataFrame.from_features(request_res)
+    if liquor_df is None:
+        liquor_df = chunk_df
+    else:
+        liquor_df = pd.concat([liquor_df, chunk_df])
+
+    sleep(0.5)
+
+print(liquor_df)
+#+end_src
+
+Let's reset the index since it's currently numbered strangely.
+#+begin_src python
+liquor_df = liquor_df.reset_index(drop=True)
+#+end_src
+
+Now that we have that data, let's write it as version 0 of our dataset.
+#+begin_src python
+generic_export('liquor-licenses', liquor_df, version=0)
+#+end_src
+
+We have 5139 rows, but unfortunately the endpoint did not give us our ~geometry~.
+Therefore, we have to use geocoding once again.
+
+From experimentation, it seems that geocoding fails for addresses that contain dashes in the numeric element, like ~5-11 Foobar Street~.
+#+begin_src python
+relevant_regex = re.compile('^(\d+)-\d+')
+print(liquor_df[liquor_df.AddrStreet.str.match(relevant_regex)])
+#+end_src
+
+To fix this, we'll remove the second dash component in all of these rows.
+#+begin_src python
+liquor_df['AddrStreet'] = liquor_df['AddrStreet'].replace(relevant_regex, r'\1')
+print(liquor_df[liquor_df.AddrStreet.str.match(relevant_regex)])
+#+end_src
+
+Next, let's filter out all of the duplicate entries, since for many of the establishments we have several entries corresponding to separate liquor license renewals.
+First, we'll delete all completely duplicate rows.
+#+begin_src python
+liquor_df = liquor_df.drop_duplicates()
+print(liquor_df)
+#+end_src
+
+As we can see, the number of rows decreased significantly.
+
+**** Filtering out mislabelled establishments
+All of the entries marked ~Adult~ /are/ what we expected, so we won't have to verify those.
+Unfortunately, some of the entries marked as ~Tavern~ and ~Package goods only~ are actually restaurants or grocery stores.
+
+1. For ~Tavern~, some of the listed places do not even seem to sell alcohol, so these definitely have to be filtered out
+2. In the case of the grocery stores, they /do/ appear to sell Liquor.
+   The [[https://publichealth.jhu.edu/2018/baltimore-liquor-stores-linked-more-to-violent-crime-than-bars-and-restaurants][Hopkins]] article that I cited earlier argued that liquor "outlets" led to increased crime, and so long as these grocery stores sell alcohol, they fall under "outlets" as well.
+   However, I would still like to distinguish between traditional liquor stores and grocery stores, so we will still look into these.
+
+To classify the businesses, we will have to use the Google Maps [[https://developers.google.com/maps/documentation/places/web-service/search][Place Search API]] to categorize each of these as ~bar~, ~liquor_store~ or neither.
+
+In order to use the API, we need to have the name of the business.
+#+begin_src python
+stores_without_names = liquor_df[liquor_df['TradeName'] == 'N/A']
+print(stores_without_names)
+#+end_src
+
+Let's drop these rows that don't have names, since they likely correspond to misinputs.
+#+begin_src python
+liquor_df = liquor_df[liquor_df['TradeName'] != 'N/A'].reset_index(drop=True)
+#+end_src
+
+Now, let's look up the details for the remaining rows.
+We'll write a function which will construct a search query from a row in the format: ~<business name> <zip code>~, and plug that into our previous function.
+In my experimentation, this form of query works with the highest accuracy.
+#+begin_src python
+def find_place_with_tradename_zip_code(row):
+    search_query = f"{row['TradeName']} {row['AddrZip']}"
+
+    return google_find_place_from_text_params(search_query)
+#+end_src
+
+Finally, let's use our functions to plug all of our rows into the API.
+#+begin_src python :async yes
+results1 = run_requests(map_df(find_place_with_tradename_zip_code, liquor_df))
+print(results1[:5])
+#+end_src
+
+The very first search resulted in ~ZERO_RESULTS~.
+Let's see how many of them there were.
+#+begin_src python
+zero_results = list(filter(lambda j: j['status'] == 'ZERO_RESULTS', enumerated_results1))
+print(len(zero_results))
+#+end_src
+
+These entries correspond to businesses that have been closed, so we will ignore them.
+Next, let's annotate our licenses dataframe with our new results.
+
+Let's annotate our ~liquor_df~ with whether the rows correspond to ~bar~ and ~liquor_store~.
+First, let's add a column corresponding to the response from the Google Places API.
+#+begin_src python
+liquor_df['google_response'] = results1
+#+end_src
+
+Before we move on, let's save another version of our data.
+#+begin_src python
+generic_export('liquor-licenses', liquor_df, version=1)
+#+end_src
+
+Now, let's define some functions we can use to determine if a row corresponds to a category.
+We want to automatically classify places that have certain words in their name, to account for locations which the Places API does not have record of.
+We will say that a row corresponds to category ~X~ if the Places API says that it has the correct ~type~, or if the name contains one of the magic keywords.
+#+begin_src python
+def test_string_contains_any(string, expected_substrings) -> bool:
+    lowercase_string = string.lower()
+    return any(map(lambda sub: (sub.lower() in lowercase_string), expected_substrings))
+
+def make_is_type_column(row, wanted_type, automatic_keywords):
+    try:
+        first_candidate = row['google_response']['candidates'][0]
+        res = (wanted_type in first_candidate['types']) or test_string_contains_any(first_candidate['name'], automatic_keywords)
+    except:
+        res = False
+
+    return res or test_string_contains_any(row['TradeName'], automatic_keywords)
+#+end_src
+
+We will say that a bar must either have the ~bar~ type, OR have ~bar~ in the name.
+A liquor store corresponds to the ~liquor_store~ Places API ~type~, and has the magic keywords ~liquor~, ~wine~ and ~spirits~.
+#+begin_src python
+liquor_df['is_bar'] = liquor_df.apply(make_is_type_column, axis=1, args=('bar', ['bar'])).astype('bool')
+liquor_df['is_liquor_store'] = liquor_df.apply(make_is_type_column, axis=1, args=('liquor_store', ['liquor', 'wine', 'spirits'])).astype('bool')
+#+end_src
+
+Now, let's see which ~Tavern~'s don't actually correspond to bars.
+#+begin_src python
+is_fake_tavern = (liquor_df['EstablishmentDesc'] == 'Tavern') & (~liquor_df['is_bar'])
+fake_taverns = liquor_df[is_fake_tavern]
+print(fake_taverns)
+#+end_src
+
+Next, fake liquor stores.
+#+begin_src python
+is_fake_liquor_store = (liquor_df['EstablishmentDesc'] == 'Package goods only') & (~liquor_df['is_liquor_store'])
+fake_liquor_stores = liquor_df[is_fake_liquor_store]
+print(fake_liquor_stores)
+#+end_src
+
+Next, let's drop any rows that don't match their expectations.
+#+begin_src python
+liquor_df = liquor_df.drop(liquor_df[is_fake_tavern | is_fake_liquor_store].index)
+print(liquor_df)
+#+end_src
+
+**** Extracting Geometry
+#+begin_src python
+liquor_df['geometry'] = liquor_df['google_response'].apply(extract_geometry_from_places_request)
+#+end_src
+
+Let's see how many rows don't have geometry now.
+#+begin_src python
+liquor_without_geometry = liquor_df[liquor_df['geometry'].isnull()].copy(deep=True)
+print(liquor_without_geometry)
+#+end_src
+
+For the remaining rows, let's geocode slightly differently, by plugging the address into the Places API rather than the name of the business and zip code.
+First, let's construct the ~Address~ column by combining street and zip code.
+#+begin_src python
+liquor_without_geometry['Address'] = liquor_without_geometry['AddrStreet'] + ' ' + liquor_without_geometry['AddrZip']
+#+end_src
+
+Next, let's plug this column into the API to get our locations.
+#+begin_src python
+def get_premise(row):
+    search_query = row['Address']
+    return google_find_place_from_text_params(search_query)
+
+results = run_requests(map_df(get_premise, liquor_without_geometry))
+#+end_src
+
+Now, let's overwrite our previous ~google_response~ column with our new responses, and then use our ~extract_geometry~ function to extract the location from the responses.
+#+begin_src python
+liquor_without_geometry['google_response'] = results
+liquor_without_geometry['geometry'] = liquor_without_geometry['google_response'].apply(extract_geometry_from_places_request)
+#+end_src
+
+Let's see how many more addresses we got from this approach.
+#+begin_src python
+print(len(liquor_without_geometry[~liquor_without_geometry['geometry'].isnull()]))
+#+end_src
+
+Any remaining rows will be dropped, since if they do not exist on Google they are likely statistically insignificant.
+#+begin_src python
+liquor_without_geometry = liquor_without_geometry.drop(liquor_without_geometry[liquor_without_geometry['geometry'].isnull()].index)
+#+end_src
+
+With that done, let's update our original dataframe with our new data.
+#+begin_src python
+liquor_df.update(liquor_without_geometry)
+#+end_src
+
+Now, any remaining null rows will be dropped, as they likely do not exist anymore.
+#+begin_src python
+print(liquor_df[liquor_df['geometry'].isnull()])
+liquor_df = liquor_df.drop(liquor_df[liquor_df['geometry'].isnull()].index)
+#+end_src
+
+Finally, let's commit our data.
+#+begin_src python
+generic_export('liquor-licenses', liquor_df, version=2)
+#+end_src
+
+**** Final touches
+Next, let's add an ~is_strip_club~ column, derived directly from the ~EstablishmentDesc~ column.
+#+begin_src python
+liquor_df['is_strip_club'] = liquor_df['EstablishmentDesc'] == 'Adult'
+print(liquor_df[liquor_df['is_strip_club'] == True].head())
+#+end_src
+
+Now, we can remove ~EstablishmentDesc~, since it's been superseded by the three ~is_<type>~ columns
+#+begin_src python
+liquor_df = liquor_df.drop('EstablishmentDesc', axis=1)
+#+end_src
+
+Finally, let's commit the last version of the data.
+#+begin_src python
+generic_export('liquor-licenses', liquor_df, version=3)
+#+end_src
+
+*** Finding Vacant Buildings
+To find the vacant buildings, we will use Open Baltimore's [[https://data.baltimorecity.gov/datasets/baltimore::vacant-building-notices/about][Vacant Building Notices]] dataset.
+#+begin_src python
+download_url = r'https://opendata.arcgis.com/api/v3/datasets/70de1e9137ce455aaee58f38b281d2cc_1/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1'
+download_cached(download_url, data_filepath('vacant-buildings', version=0))
+
+vacant_buildings_df = generic_load('vacant-buildings', version=0)
+#+end_src
+
+#+begin_src python
+print(vacant_buildings_df)
+#+end_src
+
+We are not concerned with buildings which were only declared vacant after the end date of our crime data, so let's filter out those rows.
+First, let's convert the Timezone-Aware ~DateNotice~ column to a UTC ~NaiveDateTime~, without the Timezone information.
+This will allow us to compare it to any other Naive datetime's that we have.
+#+begin_src python
+vacant_buildings_df['DateNotice'] = vacant_buildings_df['DateNotice'].dt.tz_convert(None)
+#+end_src
+
+Now, let's drop the rows we don't want.
+#+begin_src python
+crime_df = generic_load('crime-data')
+last_crime_date = crime_df['CrimeDateTime'].max()
+
+vacant_buildings_df = vacant_buildings_df.drop(vacant_buildings_df[vacant_buildings_df['DateNotice'] > last_crime_date].index)
+vacant_buildings_df = vacant_buildings_df.reset_index(drop=True)
+
+print(vacant_buildings_df['DateNotice'])
+#+end_src
+
+That got rid of about 1/3 of the entries!
+Let's export our processed version of the data.
+#+begin_src python
+generic_export('vacant-buildings', vacant_buildings_df, version=1)
+#+end_src
+
+* Exploratory Analysis & Data Visualization
 This is where we will see what our data is telling us, so that we can make better judgements on what to look at for interpretation.
-* TODO Interpretation/Conclusion
-This is where we will draw conclusions from our data.
+Let's take a subset of our crime data, since it's currently difficult to work with on consumer hardware.
+Let's take data from the year ~2015~, which was the last full year in the data, and then do a stratified random sample, taking 33% of all data from each month.
+We will also choose a static random seed for deterministic results.
+#+begin_src python
+import numpy as np
+
+random_seed = 12345
+
+crime_df = generic_load('crime-data')
+crime_codes_df = generic_load('crime-codes')
+
+crime_df = crime_df.merge(crime_codes_df[['CODE', 'VIO_PROP_CFS']], how='left', left_on='CrimeCode', right_on='CODE').drop(columns='CODE')
+crime_df['crime_severity'] = np.where(crime_df['VIO_PROP_CFS'] == 'VIOLENT', 5, 1)
+crime_df = crime_df.drop('VIO_PROP_CFS', axis=1)
+
+crime_df['CrimeMonth'] = crime_df['CrimeDateTime'].dt.month
+subset_crime_df = crime_df[crime_df['CrimeDateTime'].dt.year == 2015].groupby('CrimeMonth').apply(lambda m: m.sample(frac=0.20, random_state=random_seed)).reset_index(drop=True)
+#+end_src
+
+** Regions with the Most Crime
+Let's group the crimes into CSA's using ~geopandas.sjoin~.
+The function adds an ~index_right~ column with the index value of the intersected row on the right, but we will drop it since we don't need it.
+#+begin_src python
+baltimore_csa_df = generic_load('baltimore-csa')
+subset_crime_df = gpd.sjoin(subset_crime_df, baltimore_csa_df[['geometry', 'FID', 'Community']]).drop(columns=['index_right'])
+#+end_src
+
+Now, let's do a chloropleth map showing which regions have the most crime.
+#+begin_src python
+crimes_per_csa = subset_crime_df.groupby('FID').apply(lambda group: len(group)).reset_index(drop=True)
+baltimore_csa_df['num_crimes'] = crimes_per_csa
+#+end_src
+
+First, there' s a lot of boilerplate for making choropleth maps using Plotly, so let's abstract this into a generic function we can use for making many different choropleths.
+#+begin_src python
+import plotly.express as px
+import geopandas as gpd
+
+# Convert GeoDataFrame to GeoJSON
+geojson = loads(baltimore_csa_df.to_json())
+
+def choropleth_baltimore(df, color_col, main_label, **kwargs):
+    plotly_kwargs = {
+        'data_frame': df,
+        'geojson': geojson,
+        'locations': df.index,
+        'color': color_col,
+        'color_continuous_scale': "Reds",
+        'mapbox_style': "carto-positron",
+        'zoom': 10,
+        'center': {"lat": 39.29, "lon": -76.61},
+        'range_color': [df[color_col].min(), df[color_col].max()],
+        'opacity': 0.5,
+        'labels': {color_col: main_label},
+        'hover_name': 'Community'
+    }
+
+    plotly_kwargs.update(kwargs)
+    return px.choropleth_mapbox(**plotly_kwargs)
+#+end_src
+
+Let's also make a function for drawing a scatterplot trace over a figure.
+#+begin_src python
+def scatter_trace_baltimore(fig, df, hover_col=None, marker_size=5, **kwargs):
+    plotly_kwargs = {
+        'lon': df.geometry.x,
+        'lat': df.geometry.y,
+        'mode': 'markers',
+        'marker': {'size': marker_size}
+    } | {'hovertext': df[hover_col]} if hover_col else {}
+
+    plotly_kwargs.update(kwargs)
+
+    fig.add_trace(go.Scattermapbox(**plotly_kwargs))
+#+end_src
+
+Now, let's make a function for plotting crime.
+#+begin_src python
+def choropleth_crime(num_crimes_colname='num_crimes', **kwargs):
+    helper_kwargs = {
+        'color_col': num_crimes_colname,
+        'main_label': 'Number of Crimes'
+    }
+
+    helper_kwargs.update(kwargs)
+    return choropleth_baltimore(baltimore_csa_df, **helper_kwargs)
+
+fig = choropleth_crime()
+
+# Show the graph
+fig.show(renderer='browser')
+#+end_src
+
+These numbers are biased towards larger areas, so let's normalize the values using the normalized size of the area.
+#+begin_src python
+baltimore_csa_df['num_crimes_normalized'] = normalize_min_max(baltimore_csa_df['num_crimes'] / (normalize_min_max(baltimore_csa_df.geometry.area) + 1))
+#+end_src
+
+#+begin_src python
+choropleth_crime(num_crimes_colname='num_crimes_normalized').show(renderer='browser')
+#+end_src
+
+Surprisingly, the graph looks the exact same after normalization.
+
+** Regions with the Highest Population Density
+#+begin_src python
+population_df = generic_load('population-density')
+population_df['Community'] = baltimore_csa_df['Community']
+choropleth_baltimore(population_df, 'density', 'Population Density (normalized)').show(renderer='browser')
+#+end_src
+
+At a first glance, there doe't seem to be a huge correlation between population density and the normalized number of crimes.
+** Regions with the Lowest Median Income
+#+begin_src python
+median_income_df = generic_load('median-income')
+median_income_df['Community'] = baltimore_csa_df['Community']
+median_income_df['MedianIncomeNeg'] = -median_income_df['MedianIncome'] + 1
+choropleth_baltimore(median_income_df, 'MedianIncomeNeg', 'Inverse Median Income (normalized)').show(renderer='browser')
+#+end_src
+
+At first glance, there also isn't a huge correlation between median income and population density.
+** Annotating DataFrame with Liquor Licenses Data
+In order to analyze liquor stores, bars and strip clubs, let's add this data to our DataFrame.
+
+First, we'll categorize each establishment.
+Categorizing dataframes will be a common operation so we'll abstract it into a function.
+#+begin_src python
+liquor_df = generic_load('liquor-licenses')
+
+def categorize_points_csa(df):
+    return gpd.sjoin(df, baltimore_csa_df[['geometry', 'FID', 'Community']]).drop(columns=['index_right'])
+
+liquor_df = categorize_points_csa(liquor_df)
+#+end_src
+
+Next, we'll count the total number of each type for each ~CSA~.
+We'll make a generic function for this since this will be a common pattern.
+This is a function *with* side effects; it will update ~baltimore_csa_df~ with the new column.
+#+begin_src python
+def add_counts_per_type(df, keys, out_keys) -> None:
+    global baltimore_csa_df
+
+    counts_per_type = df.groupby('FID').apply(lambda group: pd.Series([len(group[group[key]]) for key in keys]) if keys else pd.Series([len(group)]))
+    counts_per_type.columns = out_keys
+    counts_per_type.name = 'counts_per_type'
+
+    baltimore_csa_df = baltimore_csa_df.merge(counts_per_type, left_on='FID', right_index=True, how='left')
+    baltimore_csa_df = baltimore_csa_df.fillna({key: 0 for key in counts_per_type.columns})
+#+end_src
+
+#+begin_src python
+add_counts_per_type(liquor_df, ['is_liquor_store', 'is_bar', 'is_strip_club'], ['num_liquor_stores', 'num_bars', 'num_strip_clubs'])
+#+end_src
+
+*** Regions with the Most Liquor Stores
+#+begin_src python
+fig = choropleth_baltimore(baltimore_csa_df, 'num_liquor_stores', 'Number of liquor stores')
+scatter_trace_baltimore(fig, liquor_df[liquor_df['is_liquor_store']], 'TradeName')
+
+fig.show(renderer='browser')
+#+end_src
+
+We can see that Southwest Baltimore, the region with the highest crime in the city, has the most liquor stores out of all the regions.
+This suggests a correlation between liquor stores and crime, but we will test that formally later on.
+
+*** Regions with the Most Strip Clubs
+#+begin_src python
+fig = choropleth_baltimore(baltimore_csa_df, 'num_strip_clubs', 'Number of strip clubs')
+scatter_trace_baltimore(fig, liquor_df[liquor_df['is_strip_club']], 'TradeName')
+
+fig.show(renderer='browser')
+#+end_src
+
+I am baffled by the 14 distinct strip clubs all right next to each other in Seton Hill.
+I looked up a couple of them and they all seemed to be different places too...
+
+Other than that, it does seem that strip clubs have a strong correlation to crime.
+*** Regions with the Most Bars
+#+begin_src python
+fig = choropleth_baltimore(baltimore_csa_df, 'num_bars', 'Number of bars')
+scatter_trace_baltimore(fig, liquor_df[liquor_df['is_bar']], 'TradeName')
+
+fig.show(renderer='browser')
+#+end_src
+
+It seems that Fells Point, which was /not/ one of the regions with the highest crime.
+This suggests that bars, in comparison to liquor stores and strip clubs, do not have a significant effect on crime.
+
+** Regions with the Most Vacant Buildings
+Let's classify the vacant buildings as we've done with the other data.
+#+begin_src python
+vacant_df = generic_load('vacant-buildings')
+vacant_df = categorize_points_csa(vacant_df)
+#+end_src
+
+Next, we'll count the total number of vacant buildings for each ~CSA~.
+#+begin_src python
+add_counts_per_type(vacant_df, [], ['num_vacant_buildings'])
+#+end_src
+
+#+begin_src python
+fig = choropleth_baltimore(baltimore_csa_df, 'num_vacant_buildings', 'Number of vacant buildings')
+scatter_trace_baltimore(fig, vacant_df, 'Address')
+
+fig.show(renderer='browser')
+#+end_src
+
+As we can see, there are a /ton/ of vacant buildings in Southwest Baltimore, after which is Harlem Park.
+
+** Police Stations
+Let's count the number of police stations in each ~CSA~.
+#+begin_src python
+stations_df = generic_load('police-stations')
+stations_df = categorize_points_csa(stations_df)
+#+end_src
+
+Next, we'll count the total number of police stations for each ~CSA~.
+#+begin_src python
+add_counts_per_type(stations_df, [], ['num_police_stations'])
+#+end_src
+
+#+begin_src python
+fig = choropleth_baltimore(baltimore_csa_df, 'num_police_stations', 'Number of police stations')
+scatter_trace_baltimore(fig, stations_df, 'address')
+
+fig.show(renderer='browser')
+#+end_src
+
+Despite having the highest crime rate, Southwest Baltimore /does/ have a police station.
+
+** Correlating Our Factors
+Let's see if there's a correlation between our collected factors.
+#+begin_src python
+import statsmodels.formula.api as smf
+baltimore_csa_df['MedianIncome'] = median_income_df['MedianIncome']
+baltimore_csa_df['Density'] = population_df['density']
+model = smf.ols(formula='num_crimes_normalized ~ MedianIncome + Density + num_bars + num_strip_clubs + num_liquor_stores + num_vacant_buildings + num_police_stations', data=baltimore_csa_df).fit()
+print(model.summary())
+#+end_src
+
+Let's get rid of the factors that seem improbable, namely income, density and police stations.
+#+begin_src python
+model = smf.ols(formula='num_crimes_normalized ~ num_bars + num_strip_clubs + num_liquor_stores + num_vacant_buildings', data=baltimore_csa_df).fit()
+print(model.summary())
+#+end_src
+
+Based on the summary, it seems that there is /almost/ a correlation between crime and population density.
+However, at the 95% confidence level we cannot state the correlation.
+On the other hand, median income seems to have no correlation at all.
+
+#+begin_src python
+model = smf.ols(formula='num_crimes_normalized ~ num_strip_clubs + num_liquor_stores + num_vacant_buildings', data=baltimore_csa_df).fit()
+print(model.summary())
+#+end_src
+
+Removing vacant buildings makes the R-squared drop even lower, so we will stick with this.
+Lastly, let's graph the model's predictions, and compare them to the real values.
+#+begin_src python
+predicted_crime_values = model.predict(baltimore_csa_df)
+#+end_src
+
+#+begin_src python
+baltimore_csa_df['num_crimes_normalized_predicted'] = predicted_crime_values
+fig = choropleth_crime(num_crimes_colname='num_crimes_normalized_predicted', main_label='Number of crimes predicted (normalized)')
+fig.show(renderer='browser')
+#+end_src
+
+As we can see, the basic model predicted the peaks correctly, and the rest of the colors were not too far off.
+To observe it more clearly, let's do a graph of residuals.
+#+begin_src python
+baltimore_csa_df['num_crimes_residuals'] = baltimore_csa_df['num_crimes_normalized'] - predicted_crime_values
+fig = choropleth_crime(num_crimes_colname='num_crimes_residuals', main_label='(Expected - Actual) for normalized crime rate')
+fig.show(renderer='browser')
+#+end_src
+
+The linear regression model was not very accurate for pure prediction purposes, but it was enough to show a correlation between the variables.
+
+** Identifying Crime Hotspots
+*** K-Means
+To identify crime hotspots, we will use  ~K-Means~ clustering.
+Let's iteratively find a value for ~K~.
+
+We're going to be using it with ML, so let's normalize the relevant values.
+#+begin_src python
+from scipy.cluster.vq import whiten
+
+subset_crime_df_latlon = pd.DataFrame({
+    'lon': subset_crime_df.geometry.x,
+    'lat': subset_crime_df.geometry.y
+})
+
+normalized_df = whiten(subset_crime_df_latlon)
+#+end_src
+
+
+#+begin_src python :async yes
+from scipy.cluster.vq import kmeans
+
+fits = []
+
+k_min, k_max = 5, 30
+
+for k in range(k_min, k_max):
+    print(f'k = {k}')
+    res = kmeans(normalized_df, k, seed=random_seed)
+    fits.append(res)
+#+end_src
+
+Let's see how the error changes with ~k~.
+#+begin_src python
+px.line(x=list(range(k_min, k_max)), y=list(map(lambda t: t[1], fits))).show(renderer='svg')
+#+end_src
+
+# Source: https://towardsdatascience.com/selecting-optimal-k-for-k-means-clustering-c7579fd2e926
+
+#+begin_src python :async yes
+from sklearn.cluster import KMeans
+import sklearn.metrics as metrics
+import matplotlib.pyplot as plt
+
+search_range = range(2, 21)
+report = {}
+trained_models = {}
+for k in search_range:
+    temp_dict = {}
+    kmeans = KMeans(init='k-means++',
+                    algorithm='lloyd',
+                    n_clusters=k,
+                    n_init='auto',
+                    max_iter=1000,
+                    random_state=1,
+                    verbose=0).fit(normalized_df)
+
+    inertia = kmeans.inertia_
+    temp_dict['Sum of squared error'] = inertia
+    try:
+        cluster = kmeans.predict(normalized_df)
+        chs = metrics.calinski_harabasz_score(normalized_df, cluster)
+        ss = metrics.silhouette_score(normalized_df, cluster)
+        temp_dict['Calinski Harabasz Score'] = chs
+        temp_dict['Silhouette Score'] = ss
+        report[k] = temp_dict
+        trained_models[k] = cluster
+    except Exception as e:
+        print(e)
+        report[k] = temp_dict
+#+end_src
+
+#+begin_src python :async yes
+report_df = pd.DataFrame(report).T
+report_df.plot(figsize=(15, 10),
+               xticks=search_range,
+               grid=True,
+               title=f'Selecting optimal "K"',
+               subplots=True,
+               marker='o',
+               sharex=True)
+
+plt.tight_layout()
+#+end_src
+
+It looks like 6 is the ideal number of clusters, since it has the highest Silhouette score, and also because the squared error seems to start flattening out at 6..
+Let's draw these 6 clusters on the map.
+#+begin_src python
+k = 6
+print(trained_models[k])
+
+subset_crime_df['cluster'] = trained_models[k]
+
+px.scatter_mapbox(
+    subset_crime_df,
+    lon = subset_crime_df.geometry.x,
+    lat = subset_crime_df.geometry.y,
+    color = 'cluster',
+    # size = 7,
+    opacity=0.6,
+    mapbox_style='open-street-map',
+    zoom=10
+).show(renderer='browser')
+#+end_src
+
+The ~K-Means~ algorithm gave us 11 different clusters of crime, such that the distance within each cluster is minimized.
+Let's see how many points are in each cluster:
+#+begin_src python
+counts = np.bincount(trained_models[k])
+print(counts)
+#+end_src
+
+Based on this, we can say that the first and last clusters likely correspond to hotspots.
+On the graph, these two correlate to the center cross-section of Baltimore.
+This makes sense, since it has the highest proximity to everything else in the city.
+* Interpretation/Conclusion
+** Response :ignore:
+In this project, we analyzed Baltimore crime data, and drew connections between different city-level factors and crime.
+along with crime data, we found the locations of all the police stations, the density of the population in the 56 ~CSA~'s, the median incomes, the liquor stores, bars and strip clubs, and all the vacant buildings.
+With more time, we could have explored even more factors, like education level, proximity to parks and gang activity.
+
+These factors were all carefully chosen after preliminary research, with the assumption that they would naturally work.
+however, after reaching the end of the project, it has become clear that nothing in the real world is as straightforward as theory may lead you to believe.
+Crime is nowhere close to something that can easily be modelled with such a small amount of data.
+It involves countless sociopolitical facts of life, which would take far longer to analyze.
+
+The results of this analysis showed that proximity to liquor stores and strip clubs are *very likely* factors that increase crime, and the rest of the factors were dismissed.
+However, it's quite possible that the dismissed factors /were/ good factors themselves, but unfavorable sampling resulted in them coming up as irrelevant metrics.
 * File Config :noexport:
 This is some Emacs configuration I have autoload when I open my notebook file.
 
