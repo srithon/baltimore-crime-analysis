@@ -1,0 +1,86 @@
+#+title: Baltimore Crime Analysis
+
+The project focuses on analyzing Baltimore crime data to identify major factors contributing to crime rates and their geographic distribution.
+The goal is to gain insights into the underlying causes of crime in order to address them effectively and reduce crime rates.
+
+* Introduction
+The project aims to understand the reasons behind the high crime rates in Baltimore, one of the most populous and dangerous cities in Maryland.
+By analyzing existing crime data and exploring various factors that may influence crime, the project seeks to draw correlations and provide valuable insights that can help in reducing crime in the future.
+
+* Project Objectives
+- Analyze Baltimore crime data to identify major factors contributing to crime rates.
+- Investigate the relationship between crime and geographic features such as population density, median income, proximity to police stations, bars, liquor stores, and vacant buildings.
+- Provide actionable insights to help law enforcement agencies allocate resources effectively and make informed decisions to combat crime.
+
+* Datasets
+The project uses the Baltimore Crime Data dataset, published by the city of Baltimore itself.
+The dataset contains information about various crimes, including their locations and crime codes.
+Additionally, other datasets such as population density, median household income, and location data for police stations, liquor stores, bars, and vacant buildings are utilized to explore potential correlations with crime.
+* Methodology
+The project follows the following steps:
+
+1. Data Collection:
+   - Retrieve Baltimore Community Statistical Areas and their
+     boundaries.
+   - Download and preprocess the Baltimore Crime Data.
+   - Gather additional datasets related to population density, median
+     income, police stations, liquor stores, bars, and vacant buildings.
+2. Exploratory Analysis & Data Visualization:
+   - Conduct exploratory analysis on the crime data.
+   - Visualize crime patterns, median income distribution, population
+     density, and other relevant factors.
+   - Identify regions with the highest crime rates and low median
+     income.
+3. Feature Engineering:
+   - Extract relevant features from the datasets, including crime codes,
+     proximity to police stations, bars, liquor stores, and vacant
+     buildings.
+   - Perform data transformations, normalization, and filtering as
+     needed.
+4. Correlation Analysis:
+   - Analyze the correlation between different factors and crime rates.
+   - Determine statistically significant relationships and their impact
+     on crime.
+5. Crime Hotspot Identification:
+   - Utilize K-Means clustering to identify crime hotspots based on
+     geographic features.
+   - Evaluate clustering results and visualize crime clusters on a map.
+6. Conclusion:
+   - Summarize the findings and insights obtained from the analysis.
+   - Provide recommendations for law enforcement agencies and
+     policymakers based on the results.
+
+* Requirements
+To run the project code, you will need the following dependencies:
+- Python 3.7 or above
+- Jupyter Notebook or any Python IDE
+- Libraries (these were simply extracted from the source):
+  - pandas
+  - geopandas
+  - shapely
+  - beautifulsoup
+  - requests
+  - requests_futures
+  - matplotlib
+  - plotly
+  - scikit-learn
+  - statsmodels
+
+* Getting Started
+1. Clone the project repository from GitHub.
+2. Install the required dependencies.
+3. Open the Jupyter Notebook or your preferred Python IDE.
+4. Obtain a Google Places API token and save it under the ~GOOGLE_API_KEY~ environment variable
+5. Run the project code cells in sequential order to reproduce the analysis and obtain the results.
+6. Refer to the comments within the code for detailed explanations and instructions.
+
+* License
+The project code and analysis are provided under the
+[[https://opensource.org/licenses/MIT][MIT License]]. You are free to
+use, modify, and distribute the code for academic, personal, or
+commercial purposes.
+
+* Acknowledgments
+- Baltimore City for providing the Baltimore Crime Data and other
+  relevant datasets.
+- Open Baltimore for making the datasets publicly available.
