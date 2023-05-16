@@ -84,3 +84,17 @@ commercial purposes.
 - Baltimore City for providing the Baltimore Crime Data and other
   relevant datasets.
 - Open Baltimore for making the datasets publicly available.
+
+* Implementation Details
+With the exception of the final export, I completed this entire project using [[https://orgmode.org/][Org Mode]] with the [[https://github.com/emacs-jupyter/jupyter][emacs-jupyter]] package.
+Although there were several hitches with using Emacs, such as its slow performance with large files, as well as several setup-related bugs that certainly wouldn't happen in more popular editors, I really enjoyed the challenge of adapting my workflow and customizing my editor to better work on the project.
+The customization I was most proud of is what produced the file: [[baltimore-crime-analysis_clean.org]].
+The reason the file contains the ~_clean~ suffix is because I had it generated from my /actual/ Org notebook file, which contained many things that I did not want to be version-control tracked, such as ~RESULTS~ corresponding to code blocks, ~LOGBOOK~ entries keeping track of how much time I spend in different sections, as well as personal note-taking headlines that I had interspersed throughout my document.
+I created an Emacs-Lisp function, ~org-babel-clean-export~, which would remove all of the things that I didn't want to be version-controlled from my file and write it to the file specified by the buffer-level ~CLEAN-EXPORT-FILENAME~ property.
+I also created a minor mode, ~org-babel-clean-autoexport-mode~, which would enable an on-save hook for automatically exporting my file every time I saved the file, but this proved to make things too slow, and so I succumbed to exporting only prior to git commits.
+
+You may also notice that about half of my progress was under one commit; regrettably, this was because I fell into my old habits and stopped committing to version control when I became stressed out by the approaching deadline.
+At the point where I stopped making commits, I was constantly adding and deleting functionality when I realized that different things wouldn't work out, and I lost the motivation to put all of these into version control.
+Another factor was my relative discomfort using ~magit~ in Emacs, since as a long-time Vim user I am far more accustomed to ~vim-fugitive~.
+Although it's undeniable that ~magit~ is more powerful, when using the ~evil-collection~ keybindings which provide a Vim-like experience for different packages, ~magit~ feels a little bit clunky.
+In the future, I may experiment with the stock Emacs bindings for ~magit~, which would likely feel more natural.
